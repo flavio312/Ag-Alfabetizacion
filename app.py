@@ -6,16 +6,6 @@ from src.test.main_model_SQL import mostrar_tabla_MRH, MRH, reactivos, hab
 from src.test.validation import validar_estrategia, validar_poblacion, mostrar_reporte_validacion
 
 def crear_poblacion_inicial(tamaño_poblacion: int = 10, K: int = 3) -> List[Individual]:
-    """
-    Crea una población inicial aleatoria
-    
-    Args:
-        tamaño_poblacion: Número de individuos en la población
-        K: Número de reactivos por individuo
-        
-    Returns:
-        Lista de individuos iniciales
-    """
     poblacion = []
     reactivos_disponibles = list(reactivos.keys())
     
@@ -28,18 +18,13 @@ def crear_poblacion_inicial(tamaño_poblacion: int = 10, K: int = 3) -> List[Ind
     return poblacion
 
 def crear_poblacion_diversa(tamaño_poblacion: int = 10, K: int = 3) -> List[Individual]:
-    """
-    Crea una población inicial más diversa usando diferentes estrategias
-    """
     poblacion = []
     reactivos_disponibles = list(reactivos.keys())
     
-    # 30% - Individuos completamente aleatorios
     for _ in range(int(tamaño_poblacion * 0.3)):
         genes = sample(reactivos_disponibles, K)
         poblacion.append(Individual(genes))
     
-    # 30% - Individuos enfocados en habilidades no aprobadas
     habilidades_bajas = [h for h, cal in hab.items() if cal < 0.7]
     reactivos_habilidades_bajas = []
     for r, habs in reactivos.items():
@@ -66,9 +51,6 @@ def crear_poblacion_diversa(tamaño_poblacion: int = 10, K: int = 3) -> List[Ind
     return poblacion
 
 def seleccionar_maxima_cobertura(K: int) -> List[str]:
-    """
-    Selecciona K reactivos que maximizan la cobertura de habilidades
-    """
     reactivos_disponibles = list(reactivos.keys())
     genes_seleccionados = []
     habilidades_cubiertas = set()
@@ -96,14 +78,10 @@ def seleccionar_maxima_cobertura(K: int) -> List[str]:
     return genes_seleccionados
 
 def ejecutar_algoritmo_completo():
-    """
-    Ejecuta el algoritmo genético completo con validación
-    """
     print("="*70)
     print("ALGORITMO GENÉTICO PARA OPTIMIZACIÓN DE REACTIVOS EDUCATIVOS")
     print("="*70)
     
-    # Parámetros del sistema
     K = 3  # Número de reactivos por individuo
     tamaño_poblacion = 12
     generaciones = 5
@@ -194,9 +172,6 @@ def ejecutar_algoritmo_completo():
     return ambiente, resultados_poblacion
 
 def comparar_estrategias():
-    """
-    Compara diferentes estrategias de inicialización
-    """
     print(f"\n=== COMPARACIÓN DE ESTRATEGIAS DE INICIALIZACIÓN ===")
     
     estrategias = {
@@ -232,15 +207,8 @@ def comparar_estrategias():
               f"Promedio={resultado['promedio_fitness']:.4f}")
 
 def main():
-    """Función principal"""
-    # Fijar semilla para reproducibilidad (opcional)
     seed(42)
-    
-    # Ejecutar algoritmo completo
     ambiente, resultados = ejecutar_algoritmo_completo()
-    
-    # Comparar estrategias (opcional)
-    # comparar_estrategias()
     
     print(f"\n{'='*70}")
     print("ALGORITMO GENÉTICO COMPLETADO EXITOSAMENTE")

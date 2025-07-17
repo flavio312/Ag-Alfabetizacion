@@ -1,349 +1,345 @@
-# Algoritmo Genético para Optimización de Reactivos Educativos
+# Algoritmo Genético para Selección de Reactivos Educativos
 
-Este proyecto implementa un algoritmo genético para optimizar la selección de reactivos educativos basado en las habilidades del estudiante y métricas de aprendizaje específicas.
+## 📋 Descripción General
 
-## 📁 Estructura del Proyecto
+Este proyecto implementa un **algoritmo genético especializado** para optimizar la selección de reactivos educativos basándose en las habilidades del estudiante y métricas de aprendizaje específicas. El sistema está diseñado para maximizar el aprendizaje del estudiante priorizando habilidades deficientes mientras minimiza la redundancia.
+
+## 🎯 Objetivos del Sistema
+
+El algoritmo optimiza simultáneamente cuatro objetivos clave:
+
+- **OBJ1 (Maximizar)**: Uso de reactivos que involucran habilidades no aprobadas (priorizando las más bajas)
+- **OBJ2 (Minimizar)**: Uso de reactivos ya realizados anteriormente
+- **OBJ3 (Minimizar)**: Uso de reactivos con habilidades ya aprobadas
+- **OBJ4 (Maximizar)**: Cantidad de habilidades únicas involucradas
+
+### Función de Fitness
+
+```
+Fitness = [(1 + OBJ1) × (1 + OBJ4)] / [(1 + OBJ2) × (1 + OBJ3)]
+```
+
+## 🏗️ Arquitectura del Sistema
+
+### Componentes Principales
 
 ```
 src/
 ├── models/
-│   ├── individual/
-│   │   └── individual.py          # Definición del individuo
-│   └── environment/
-│       └── environment.py         # Motor del algoritmo genético
-├── test/
-│   ├── main_model_SQL.py          # Datos del sistema y matrices
-│   ├── validation.py              # Sistema de validación
-│   └── test_validation.py         # Pruebas de validación
-├── main_algorithm.py              # Algoritmo principal
-└── ejemplo_uso.py                 # Ejemplos de uso
+│   ├── individual/          # Definición de individuos del AG
+│   └── environment/         # Motor del algoritmo genético
+├── visualization/           # Sistema de gráficas y reportes
+├── validation/              # Simulación y validación de estrategias
+└── examples/               # Ejemplos de uso y datos de prueba
 ```
 
-## 🧬 Componentes del Algoritmo Genético
+### Clases Fundamentales
 
-### 1. **INDIVIDUO** (`src/models/individual/individual.py`)
+#### 1. `Reactivo`
+Representa un ejercicio educativo con sus habilidades asociadas.
 
-#### Representación
-- **Genes**: Lista de reactivos educativos (ej: `["R1", "R9", "R15"]`)
+```python
+@dataclass
+class Reactivo:
+    id: str                                    # Identificador único
+    habilidades: List[str]                     # Lista de habilidades involucradas
+    peso_habilidades: Dict[str, float]         # Pesos normalizados (suman 1.0)
+```
+
+**Características clave:**
+- ✅ Soporte para 1 a n habilidades por reactivo
+- ✅ Normalización automática de pesos (garantiza suma = 1.0)
+- ✅ Distribución equitativa automática si no se especifican pesos
+
+#### 2. `Habilidad`
+Representa una competencia educativa con su estado actual.
+
+```python
+@dataclass
+class Habilidad:
+    id: str                                    # Identificador único
+    calificacion: float = 0.0                  # Calificación actual [0.0-1.0]
+    aprobada: bool = False                     # Estado de aprobación
+    umbral_aprobacion: float = 0.7             # Umbral para aprobar
+```
+
+#### 3. `Individual`
+Cromosoma del algoritmo genético que representa una solución candidata.
+
+```python
+class Individual:
+    genes: List[str]                           # Lista de K reactivos seleccionados
+    fitness: float                             # Valor de aptitud calculado
+    metricas: Dict                             # Valores de OBJ1, OBJ2, OBJ3, OBJ4
+```
+
+## 🧬 Algoritmo Genético
+
+### Representación Genética
+
+- **Gen**: ID de un reactivo educativo (ej: "R1", "R9", "R15")
 - **Cromosoma**: Secuencia ordenada de K reactivos alcanzables
 - **Fenotipo**: Conjunto de habilidades involucradas en los reactivos
 
-#### Función de Fitness
+### Operadores Genéticos
+
+#### 1. **Selección por Torneo**
 ```python
-fitness = [(1 + OBJ1) × (1 + OBJ4)] / [(1 + OBJ2) × (1 + OBJ3)]
+def seleccionar_padres(self) -> Tuple[Individual, Individual]:
+    tamaño_torneo = max(2, int(len(self.poblacion) * self.presion_seleccion))
+    # Selecciona el mejor de cada torneo
 ```
 
-**Métricas (Objetivos):**
-- **OBJ1** (MAX): Ratio de habilidades no aprobadas involucradas
-- **OBJ2** (MIN): Suma de veces que se han realizado los reactivos
-- **OBJ3** (MIN): Cantidad de reactivos con habilidades ya aprobadas  
-- **OBJ4** (MAX): Cantidad total de habilidades únicas involucradas
-
-#### Ubicación del código:
-```python
-def _calculate_fitness(self):
-    """Calcula el fitness según la fórmula especificada"""
-    numerador = (1 + self.metrica_1) * (1 + self.metrica_4)
-    denominador = (1 + self.metrica_2) * (1 + self.metrica_3)
-    self.fitness = numerador / denominador
-```
-
----
-
-### 2. **EMPAREJAMIENTO/SELECCIÓN** (`src/models/environment/environment.py`)
-
-#### Método: Selección por Torneo
-- **Ubicación**: Método `select_pair()` (líneas 45-62)
-- **Algoritmo**: 
-  1. Selecciona candidatos aleatorios (tamaño del torneo = población × presión_selección)
-  2. Elige el mejor fitness de cada torneo
-  3. Garantiza que los padres sean diferentes
+#### 2. **Cruza con Corrección de Duplicados**
+Implementa la **Estrategia 1** especificada en el documento:
 
 ```python
-def select_pair(self) -> Tuple[Individual, Individual]:
-    """Selecciona un par de padres usando selección por torneo"""
-    tournament_size = max(2, int(len(self.poblacion) * self.selection_pressure))
+def cruzar(self, padre1: Individual, padre2: Individual):
+    # 1. Cruza en punto aleatorio
+    punto_cruza = random.randint(1, len(padre1.genes) - 1)
+    hijo1_genes = padre1.genes[:punto_cruza] + padre2.genes[punto_cruza:]
     
-    # Torneo para padre 1
-    candidates1 = sample(self.poblacion, min(tournament_size, len(self.poblacion)))
-    padre = max(candidates1, key=lambda x: x.fitness)
-    
-    # Torneo para padre 2 (asegurar que sea diferente)
-    candidates2 = sample(self.poblacion, min(tournament_size, len(self.poblacion)))
-    madre = max(candidates2, key=lambda x: x.fitness)
+    # 2. Corregir duplicados
+    hijo1_genes = self._corregir_duplicados(hijo1_genes, todos_los_genes)
 ```
 
-#### Parámetros:
-- `selection_pressure`: Controla intensidad de selección (0.0-1.0)
-- Valores altos → más elitista, valores bajos → más diverso
+**Proceso de corrección:**
+1. Identificar reactivos faltantes: `FH = reactivos(padres) - reactivos(hijo)`
+2. Buscar duplicados en el hijo
+3. Reemplazar duplicados con reactivos faltantes aleatorios
 
----
-
-### 3. **CRUZA/CROSSOVER** (`src/models/environment/environment.py`)
-
-#### Método: Cruza de un punto con corrección de duplicados
-- **Ubicación**: Método `crosses()` (líneas 64-85)
-- **Ubicación corrección**: Método `_corregir_duplicados()` (líneas 87-120)
-
-#### Algoritmo:
-1. **Cruza básica**: Selecciona punto aleatorio y intercambia segmentos
-2. **Corrección de duplicados** (según Estrategia 1 del documento):
-   - Identifica reactivos faltantes: `FH = reactivos(padres) - reactivos(hijo)`
-   - Encuentra duplicados en el hijo
-   - Reemplaza duplicados con reactivos faltantes aleatoriamente
-
+#### 3. **Mutación Inteligente**
 ```python
-def crosses(self):
-    """Realiza cruza con corrección de duplicados"""
-    for _ in range(len(self.poblacion)):
-        padre, madre = self.select_pair()
-        punto_cruza = randint(1, len(padre.gens) - 1)
-        
-        # Crear hijos iniciales
-        hijo1_genes = padre.gens[:punto_cruza] + madre.gens[punto_cruza:]
-        hijo2_genes = madre.gens[:punto_cruza] + padre.gens[punto_cruza:]
-        
-        # Corregir duplicados
-        hijo1_genes = self._corregir_duplicados(hijo1_genes, padre.gens + madre.gens)
-        hijo2_genes = self._corregir_duplicados(hijo2_genes, padre.gens + madre.gens)
+def mutar(self, individuo: Individual):
+    if random.random() < self.tasa_mutacion:
+        # Seleccionar posición aleatoria
+        pos = random.randint(0, len(individuo.genes) - 1)
+        # Reemplazar con reactivo no presente
+        nuevo_reactivo = choice(reactivos_no_presentes)
 ```
 
-#### Ejemplo de corrección:
-```
-Padre 1: [R1, R2, R3]     Madre: [R4, R5, R6]
-Hijo inicial: [R1, R2, R5, R6]  ← Faltan R3, R4; sobra ninguno
-Resultado: [R1, R2, R5, R6] ← Ya está correcto
-
-Padre 1: [R1, R2, R3]     Madre: [R1, R5, R6]  
-Hijo inicial: [R1, R2, R1, R6]  ← Falta R3, R5; sobra R1
-Hijo corregido: [R1, R2, R3, R6]  ← Se reemplaza un R1 por R3
-```
-
----
-
-### 4. **MUTACIÓN** (`src/models/environment/environment.py`)
-
-#### Método: Mutación por reemplazo de gen
-- **Ubicación**: Método `mutate()` (líneas 122-135)
-- **Probabilidad**: Controlada por `mutation_rate`
-
-#### Algoritmo:
-1. Para cada individuo, aplicar mutación según probabilidad
-2. Seleccionar posición aleatoria en el cromosoma  
-3. Reemplazar con reactivo no presente en el individuo
-4. Recalcular fitness del individuo modificado
-
-```python
-def mutate(self):
-    """Aplica mutación a algunos individuos"""
-    for individuo in self.poblacion:
-        if random() < self.mutation_rate:
-            # Seleccionar posición aleatoria
-            pos = randint(0, len(individuo.gens) - 1)
-            
-            # Nuevo reactivo que no esté ya presente
-            reactivos_disponibles = [r for r in self.all_reactivos 
-                                   if r not in individuo.gens]
-            if reactivos_disponibles:
-                nuevo_reactivo = choice(reactivos_disponibles)
-                individuo.gens[pos] = nuevo_reactivo
-                individuo.update_individual()  # Recalcular fitness
-```
-
----
-
-### 5. **SELECCIÓN DE SUPERVIVIENTES/PODA** (`src/models/environment/environment.py`)
-
-#### Método: Selección elitista con diversidad
-- **Ubicación**: Método `selection()` (líneas 137-156)
-- **Estrategia**: Combina elitismo con diversidad
-
-#### Algoritmo:
-1. **Ordenar** población por fitness (descendente)
-2. **Élite**: Mantener 50% de mejores individuos
-3. **Diversidad**: Agregar 25% aleatorios del resto
-4. **Resultado**: Nueva población con 75% del tamaño original
-
-```python
-def selection(self):
-    """Selecciona supervivientes para la siguiente generación"""
-    # Ordenar por fitness (descendente)
-    self.poblacion.sort(key=lambda x: x.fitness, reverse=True)
-    
-    # Élite (mejores individuos)
-    tamaño_elite = len(self.poblacion) // 2
-    elite = self.poblacion[:tamaño_elite]
-    
-    # Algunos aleatorios para diversidad
-    tamaño_aleatorio = len(self.poblacion) // 4  
-    resto = self.poblacion[tamaño_elite:]
-    if resto and tamaño_aleatorio > 0:
-        aleatorios = sample(resto, min(tamaño_aleatorio, len(resto)))
-    else:
-        aleatorios = []
-    
-    # Nueva población = élite + aleatorios
-    self.poblacion = elite + aleatorios
-```
-
-#### Ventajas:
-- **Elitismo**: Preserva mejores soluciones
-- **Diversidad**: Evita convergencia prematura
+#### 4. **Selección de Supervivientes**
+Estrategia híbrida que combina:
+- **Elitismo** (50%): Preserva mejores soluciones
+- **Diversidad** (25%): Mantiene variabilidad genética
 - **Reducción gradual**: Intensifica búsqueda con el tiempo
 
----
+## 📊 Sistema de Visualización
 
-### 6. **BUCLE PRINCIPAL** (`src/models/environment/environment.py`)
+### Gráficas Implementadas
 
-#### Ubicación: Método `start()` (líneas 26-44)
-
-#### Secuencia por generación:
+#### 1. **Evolución del Fitness**
 ```python
-def start(self):
-    for generation in range(self.generations):
-        # 1. Guardar mejor individuo histórico
-        mejor_actual = max(self.poblacion, key=lambda x: x.fitness)
-        self.best_individuals_history.append(mejor_actual.copy())
-        
-        # 2. Mostrar estadísticas
-        self._show_generation_stats(generation + 1)
-        
-        # 3. CRUZA: Generar descendencia
-        self.crosses()
-        
-        # 4. MUTACIÓN: Aplicar mutaciones
-        self.mutate()
-        
-        # 5. SELECCIÓN: Elegir supervivientes
-        self.selection()
+def graficar_evolucion_fitness(self):
+    # Muestra progreso del mejor fitness por generación
+    # Incluye zoom a últimas 10 generaciones
 ```
 
----
+#### 2. **Métricas de Objetivos**
+```python
+def graficar_metricas_objetivos(self):
+    # Evolución de OBJ1, OBJ2, OBJ3, OBJ4
+    # 4 subgráficas con interpretación clara
+```
+
+#### 3. **Estado de Habilidades**
+```python
+def graficar_estado_habilidades(self):
+    # Barras: Calificaciones por habilidad
+    # Pastel: Distribución aprobadas/no aprobadas
+```
+
+#### 4. **Análisis de Reactivos Seleccionados**
+```python
+def graficar_analisis_reactivos_seleccionados(self):
+    # Habilidades por reactivo
+    # Distribución de pesos
+    # Mapa de calor reactivos vs habilidades
+    # Métricas del mejor individuo
+```
+
+## 🔬 Sistema de Validación
+
+### Simulación de Mejora Esperada
+
+El sistema puede predecir el impacto de resolver correctamente los reactivos seleccionados:
+
+```python
+def simular_mejora(self, individuo: Individual) -> Dict:
+    # 1. Crear copia temporal de habilidades
+    # 2. Simular mejora proporcional a pesos
+    # 3. Recalcular métricas
+    # 4. Retornar comparación antes/después
+```
+
+**Salida de la simulación:**
+- Fitness antes vs después
+- Habilidades aprobadas antes vs después
+- Número de nuevas habilidades que se aprobarían
+- Mejora esperada en fitness
 
 ## 🚀 Uso del Sistema
 
-### Ejecución Básica:
-```python
-from src.main_algorithm import ejecutar_algoritmo_completo
+### Instalación de Dependencias
 
-# Ejecutar con parámetros por defecto
-ambiente, resultados = ejecutar_algoritmo_completo()
+```bash
+pip install numpy matplotlib pandas seaborn dataclasses copy random typing
 ```
 
-### Ejecución Personalizada:
+### Uso Básico
+
 ```python
-from src.models.environment.environment import Environment
-from src.main_algorithm import crear_poblacion_diversa
+# 1. Crear datos del problema
+reactivos_data, habilidades_data, conteo_reactivos, reactivos_alcanzables = crear_datos_ejemplo()
 
-# Crear población
-poblacion = crear_poblacion_diversa(tamaño_poblacion=15, K=3)
-
-# Configurar ambiente
-ambiente = Environment(
-    poblacion=poblacion,
-    generations=10,           # Más generaciones
-    K=3,                     # 3 reactivos por individuo
-    mutation_rate=0.15,      # 15% de mutación
-    selection_pressure=0.7   # Alta presión de selección
+# 2. Configurar algoritmo genético
+ag = AlgoritmoGenetico(
+    reactivos_alcanzables=reactivos_alcanzables,
+    reactivos_data=reactivos_data,
+    habilidades_data=habilidades_data,
+    conteo_reactivos=conteo_reactivos,
+    K=3,                    # Seleccionar 3 reactivos
+    tamaño_poblacion=20,    # 20 individuos
+    generaciones=50,        # 50 iteraciones
+    tasa_mutacion=0.15,     # 15% mutación
+    presion_seleccion=0.7   # Alta presión
 )
 
-# Ejecutar
-ambiente.start()
+# 3. Ejecutar evolución
+ag.evolucionar()
 
-# Obtener mejor resultado
-mejor = ambiente.get_best_individual()
-print(f"Mejor solución: {mejor.gens}")
-print(f"Fitness: {mejor.fitness:.4f}")
+# 4. Generar visualizaciones
+visualizador = VisualizadorResultados(ag)
+visualizador.generar_reporte_completo()
 ```
 
----
+### Configuración Avanzada
 
-## 📊 Sistema de Validación
-
-### Ubicación: `src/test/validation.py`
-
-#### Estrategia de Validación:
-1. **Simular éxito**: Asumir que reactivos seleccionados se resuelven correctamente
-2. **Actualizar habilidades**: Colocar calificación 0.7 a habilidades < 0.7
-3. **Recalcular métricas**: Evaluar impacto en fitness y objetivos
-4. **MRH_temp**: Crear matriz temporal con calificaciones simuladas
-
-#### Uso:
 ```python
-from src.test.validation import validar_estrategia
+# Obtener recomendaciones de parámetros
+config = ConfiguradorParametros.recomendar_parametros(
+    num_reactivos=10,
+    num_habilidades=8,
+    complejidad_problema="medio"  # "simple", "medio", "complejo"
+)
 
-resultado = validar_estrategia(individuo, mostrar_detalle=True)
-print(f"Mejora esperada: {resultado['mejora_fitness']:+.4f}")
+# Aplicar configuración recomendada
+ag = AlgoritmoGenetico(**config, ...)
 ```
 
----
-
-## ⚙️ Parámetros del Sistema
+## ⚙️ Parámetros Recomendados
 
 | Parámetro | Rango | Descripción | Valor Recomendado |
 |-----------|-------|-------------|-------------------|
-| `K` | 1-10 | Reactivos por individuo | 3 |
-| `tamaño_poblacion` | 10-50 | Individuos en población | 12-20 |
-| `generations` | 3-20 | Número de generaciones | 5-10 |
-| `mutation_rate` | 0.05-0.25 | Probabilidad de mutación | 0.10-0.15 |
-| `selection_pressure` | 0.3-0.9 | Intensidad de selección | 0.5-0.7 |
+| `K` | 1-10 | Reactivos por individuo | 3-5 |
+| `tamaño_poblacion` | 10-50 | Individuos en población | 20-30 |
+| `generaciones` | 10-100 | Número de iteraciones | 50 |
+| `tasa_mutacion` | 0.05-0.25 | Probabilidad de mutación | 0.10-0.15 |
+| `presion_seleccion` | 0.3-0.9 | Intensidad de selección | 0.6-0.7 |
 
----
+### Interpretación de Fitness
 
-## 📈 Métricas y Objetivos
+- **Alto (>2.0)**: Excelente selección de reactivos
+- **Medio (1.0-2.0)**: Buena selección, puede mejorarse
+- **Bajo (<1.0)**: Selección sub-óptima, revisar parámetros
 
-### Objetivos del Sistema:
-1. **OBJ1** (MAX): Priorizar habilidades no aprobadas (especialmente las más bajas)
-2. **OBJ2** (MIN): Evitar reactivos ya realizados múltiples veces  
-3. **OBJ3** (MIN): Reducir uso de reactivos con habilidades ya dominadas
-4. **OBJ4** (MAX): Maximizar cobertura de habilidades diferentes
+## 📈 Ejemplo de Datos
 
-### Interpretación del Fitness:
-- **Alto** (>2.0): Excelente selección de reactivos
-- **Medio** (1.0-2.0): Buena selección
-- **Bajo** (<1.0): Selección sub-óptima
-
----
-
-## 🔧 Extensiones Posibles
-
-### 1. Operadores Genéticos Adicionales:
-- Cruza uniforme
-- Mutación por intercambio
-- Cruza multipunto
-
-### 2. Estrategias de Selección:
-- Selección proporcional al fitness
-- Selección por ranking
-- Selección estocástica universal
-
-### 3. Población Adaptativa:
-- Tamaño de población variable
-- Múltiples subpoblaciones (islas)
-- Migración entre poblaciones
-
----
-
-## 📝 Logging y Debugging
-
-### Activar logs detallados:
+### Reactivos de Ejemplo
 ```python
-# En environment.py, cambiar show_generation_stats para más detalle
-def _show_generation_stats(self, generation: int):
-    # Agregar logs adicionales según necesidad
-    pass
+reactivos_data = {
+    'R1': Reactivo('R1', ['H1', 'H3', 'H5'], {'H1': 0.4, 'H3': 0.3, 'H5': 0.3}),
+    'R2': Reactivo('R2', ['H3', 'H4'], {'H3': 0.6, 'H4': 0.4}),
+    'R3': Reactivo('R3', ['H1', 'H2', 'H4', 'H6']),  # Pesos automáticos (0.25 c/u)
+    'R4': Reactivo('R4', ['H2', 'H5']),               # Pesos automáticos (0.5 c/u)
+    'R5': Reactivo('R5', ['H6']),                     # Una sola habilidad (1.0)
+}
 ```
 
-### Ver evolución:
+### Habilidades de Ejemplo
 ```python
-# Acceder al historial de mejores individuos
-for i, individuo in enumerate(ambiente.best_individuals_history):
-    print(f"Gen {i+1}: {individuo.fitness:.4f} - {individuo.gens}")
+habilidades_data = {
+    'H1': Habilidad('H1', 0.9),   # Aprobada (90%)
+    'H2': Habilidad('H2', 1.0),   # Aprobada (100%)
+    'H3': Habilidad('H3', 0.5),   # No aprobada (50%) - Prioridad alta
+    'H4': Habilidad('H4', 0.0),   # No aprobada (0%) - Prioridad muy alta
+    'H5': Habilidad('H5', 0.0),   # No aprobada (0%) - Prioridad muy alta
+    'H6': Habilidad('H6', 0.0),   # No aprobada (0%) - Prioridad muy alta
+}
 ```
 
-## 🎯 Casos de Uso Típicos
+## 🔧 Validaciones Implementadas
 
-1. **Educación personalizada**: Seleccionar ejercicios óptimos para cada estudiante
-2. **Remedial académico**: Enfocar en habilidades con mayor deficiencia  
-3. **Evaluación adaptativa**: Maximizar información diagnóstica
-4. **Planificación curricular**: Optimizar secuencias de aprendizaje
+### 1. **Restricción de Pesos**
+```python
+def validar_restricciones():
+    for reactivo_id, reactivo in reactivos_data.items():
+        suma_pesos = sum(reactivo.peso_habilidades.values())
+        assert abs(suma_pesos - 1.0) < 1e-6, f"Los pesos del reactivo {reactivo_id} no suman 1"
+```
+
+### 2. **Corrección Automática**
+- Los pesos se normalizan automáticamente al crear reactivos
+- Se valida que no haya duplicados en los cromosomas
+- Se verifica que todos los reactivos existan en el conjunto alcanzable
+
+## 📋 Salida del Sistema
+
+### Reporte Completo
+```
+MEJOR SOLUCIÓN ENCONTRADA:
+Reactivos seleccionados: ['R3', 'R4', 'R5']
+Fitness: 2.3456
+Métricas:
+  OBJ1: 0.857
+  OBJ2: 1.000
+  OBJ3: 0.000
+  OBJ4: 5.000
+
+SIMULACIÓN DE MEJORA:
+Fitness actual: 2.3456
+Fitness esperado: 3.1234
+Mejora esperada: 0.7778
+Habilidades aprobadas antes: 2
+Habilidades aprobadas después: 4
+Nuevas habilidades que se aprobarían: 2
+```
+
+## 🎨 Características Destacadas
+
+### ✅ **Implementado**
+- [x] Pesos de habilidades normalizados (suman 1.0)
+- [x] Soporte para reactivos con 2-n habilidades
+- [x] Gráficas completas de evaluación
+- [x] Simulación de mejora esperada
+- [x] Corrección automática de duplicados
+- [x] Configuración flexible de parámetros
+- [x] Validación de restricciones
+- [x] Reporte completo con métricas
+
+### 🚀 **Posibles Extensiones**
+- [ ] Cruza uniforme y multipunto
+- [ ] Múltiples subpoblaciones (algoritmo de islas)
+- [ ] Optimización multiobjetivo (NSGA-II)
+- [ ] Aprendizaje de parámetros dinámicos
+- [ ] Integración con base de datos real
+- [ ] API REST para uso remoto
+
+## 📚 Referencias
+
+- **Documento base**: Especificación del algoritmo genético para alfabetización
+- **Estrategia de cruza**: Estrategia 1 para corrección de duplicados
+- **Función de fitness**: Fórmula multiobjetivo especificada
+- **Validación**: Sistema de simulación de mejora esperada
+
+## 📞 Soporte
+
+Para reportar problemas o sugerir mejoras, por favor:
+1. Revisar la documentación completa
+2. Verificar que los datos cumplan las restricciones
+3. Probar con parámetros recomendados
+4. Contactar al desarrollador con ejemplos específicos
+
+---
+
+**Nota**: Este algoritmo está específicamente diseñado para optimización educativa y puede requerir ajustes para otros dominios de aplicación.
