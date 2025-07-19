@@ -1,0 +1,757 @@
+import React, { useState, useCallback } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Slider } from '@/components/ui/slider';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
+import { Play, Settings, BarChart3, Users, Target, Zap } from 'lucide-react';
+
+const AlgoritmoGeneticoInterface = () => {
+  // Estados para la configuración
+  const [parametros, setParametros] = useState({
+    K: 3,
+    tamañoPoblacion: 20,
+    generaciones: 50,
+    tasaMutacion: 0.15,
+    presionSeleccion: 0.7
+  });
+
+  // Estados para los datos
+  const [reactivos, setReactivos] = useState([
+    { id: 'R1', habilidades: ['H1', 'H3', 'H5'], pesos: [0.4, 0.3, 0.3] },
+    { id: 'R2', habilidades: ['H3', 'H4'], pesos: [0.6, 0.4] },
+    { id: 'R3', habilidades: ['H1', 'H2', 'H4', 'H6'], pesos: [0.25, 0.25, 0.25, 0.25] },
+    { id: 'R4', habilidades: ['H2', 'H5'], pesos: [0.5, 0.5] },
+    { id: 'R5', habilidades: ['H6'], pesos: [1.0] },
+  ]);
+
+  const [habilidades, setHabilidades] = useState([
+    { id: 'H1', calificacion: 0.9, aprobada: true },
+    { id: 'H2', calificacion: 1.0, aprobada: true },
+    { id: 'H3', calificacion: 0.5, aprobada: false },
+    { id: 'H4', calificacion: 0.0, aprobada: false },
+    { id: 'H5', calificacion: 0.0, aprobada: false },
+    { id: 'H6', calificacion: 0.0, aprobada: false },
+  ]);
+
+  const [conteoReactivos, setConteoReactivos] = useState({
+    R1: 2, R2: 3, R3: 0, R4: 0, R5: 0
+  });
+
+  // Estados para los resultados
+  const [ejecutando, setEjecutando] = useState(false);
+  const [resultados, setResultados] = useState(null);
+  const [historialFitness, setHistorialFitness] = useState([]);
+  const [mejorSolucion, setMejorSolucion] = useState(null);
+
+  // Algoritmo genético simplificado para la demo
+  const calcularFitness = useCallback((genes) => {
+    let obj1 = 0, obj2 = 0, obj3 = 0, obj4 = 0;
+    
+    // OBJ1: Habilidades no aprobadas
+    const habilidadesInvolucradas = new Set();
+    genes.forEach(reactivoId => {
+      const reactivo = reactivos.find(r => r.id === reactivoId);
+      if (reactivo) {
+        reactivo.habilidades.forEach((habilidadId, idx) => {
+          habilidadesInvolucradas.add(habilidadId);
+          const habilidad = habilidades.find(h => h.id === habilidadId);
+          if (habilidad && !habilidad.aprobada) {
+            const peso = reactivo.pesos[idx];
+            const prioridad = 1.0 - habilidad.calificacion;
+            obj1 += peso * prioridad;
+          }
+        });
+      }
+    });
+
+    // OBJ2: Reactivos ya realizados
+    obj2 = genes.reduce((sum, reactivoId) => sum + (conteoReactivos[reactivoId] || 0), 0);
+
+    // OBJ3: Reactivos con habilidades aprobadas
+    obj3 = genes.filter(reactivoId => {
+      const reactivo = reactivos.find(r => r.id === reactivoId);
+      return reactivo && reactivo.habilidades.some(habilidadId => {
+        const habilidad = habilidades.find(h => h.id === habilidadId);
+        return habilidad && habilidad.aprobada;
+      });
+    }).length;
+
+    // OBJ4: Cantidad de habilidades involucradas
+    obj4 = habilidadesInvolucradas.size;
+
+    const fitness = ((1 + obj1) * (1 + obj4)) / ((1 + obj2) * (1 + obj3));
+    
+    return {
+      fitness,
+      obj1: obj1 / Math.max(1, genes.length),
+      obj2,
+      obj3,
+      obj4,
+      genes
+    };
+  }, [reactivos, habilidades, conteoReactivos]);
+
+  const ejecutarAlgoritmo = async () => {
+    setEjecutando(true);
+    setHistorialFitness([]);
+    
+    // Simulación del algoritmo genético
+    const reactivosDisponibles = reactivos.map(r => r.id);
+    let mejorIndividuo = null;
+    let fitness_history = [];
+
+    for (let gen = 0; gen < parametros.generaciones; gen++) {
+      // Generar individuos aleatorios (simplificado)
+      const poblacion = [];
+      for (let i = 0; i < parametros.tamañoPoblacion; i++) {
+        const genes = [];
+        const reactivosRestantes = [...reactivosDisponibles];
+        
+        for (let j = 0; j < parametros.K && reactivosRestantes.length > 0; j++) {
+          const idx = Math.floor(Math.random() * reactivosRestantes.length);
+          genes.push(reactivosRestantes.splice(idx, 1)[0]);
+        }
+        
+        poblacion.push(calcularFitness(genes));
+      }
+
+      // Encontrar el mejor de esta generación
+      const mejorDeGeneracion = poblacion.reduce((mejor, actual) => 
+        actual.fitness > mejor.fitness ? actual : mejor
+      );
+
+      if (!mejorIndividuo || mejorDeGeneracion.fitness > mejorIndividuo.fitness) {
+        mejorIndividuo = mejorDeGeneracion;
+      }
+
+      fitness_history.push({
+        generacion: gen + 1,
+        fitness: mejorDeGeneracion.fitness,
+        obj1: mejorDeGeneracion.obj1,
+        obj2: mejorDeGeneracion.obj2,
+        obj3: mejorDeGeneracion.obj3,
+        obj4: mejorDeGeneracion.obj4
+      });
+
+      // Simular delay para mostrar progreso
+      if (gen % 10 === 0) {
+        setHistorialFitness([...fitness_history]);
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+    }
+
+    setHistorialFitness(fitness_history);
+    setMejorSolucion(mejorIndividuo);
+    setResultados({
+      mejorFitness: mejorIndividuo.fitness,
+      reactivosSeleccionados: mejorIndividuo.genes,
+      metricas: {
+        obj1: mejorIndividuo.obj1,
+        obj2: mejorIndividuo.obj2,
+        obj3: mejorIndividuo.obj3,
+        obj4: mejorIndividuo.obj4
+      }
+    });
+    
+    setEjecutando(false);
+  };
+
+  const agregarReactivo = () => {
+    const nuevoId = `R${reactivos.length + 1}`;
+    setReactivos([...reactivos, {
+      id: nuevoId,
+      habilidades: ['H1'],
+      pesos: [1.0]
+    }]);
+    setConteoReactivos({...conteoReactivos, [nuevoId]: 0});
+  };
+
+  const agregarHabilidad = () => {
+    const nuevoId = `H${habilidades.length + 1}`;
+    setHabilidades([...habilidades, {
+      id: nuevoId,
+      calificacion: 0.0,
+      aprobada: false
+    }]);
+  };
+
+  const actualizarHabilidad = (id, calificacion) => {
+    setHabilidades(habilidades.map(h => 
+      h.id === id ? { ...h, calificacion, aprobada: calificacion >= 0.7 } : h
+    ));
+  };
+
+  const normalizarPesos = (pesos) => {
+    const suma = pesos.reduce((sum, peso) => sum + peso, 0);
+    return suma > 0 ? pesos.map(peso => peso / suma) : pesos;
+  };
+
+  const datosHabilidades = habilidades.map(h => ({
+    name: h.id,
+    calificacion: h.calificacion,
+    aprobada: h.aprobada
+  }));
+
+  const datosDistribucion = [
+    { name: 'Aprobadas', value: habilidades.filter(h => h.aprobada).length, color: '#22c55e' },
+    { name: 'No Aprobadas', value: habilidades.filter(h => !h.aprobada).length, color: '#ef4444' }
+  ];
+
+  return (
+    <div className="p-6 max-w-7xl mx-auto space-y-6">
+      <div className="text-center mb-8">
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">
+          Algoritmo Genético para Selección de Reactivos Educativos
+        </h1>
+        <p className="text-gray-600">
+          Sistema inteligente para optimizar la selección de ejercicios basado en habilidades del estudiante
+        </p>
+      </div>
+
+      <Tabs defaultValue="configuracion" className="w-full">
+        <TabsList className="grid w-full grid-cols-4">
+          <TabsTrigger value="configuracion" className="flex items-center gap-2">
+            <Settings className="w-4 h-4" />
+            Configuración
+          </TabsTrigger>
+          <TabsTrigger value="datos" className="flex items-center gap-2">
+            <Users className="w-4 h-4" />
+            Datos
+          </TabsTrigger>
+          <TabsTrigger value="ejecucion" className="flex items-center gap-2">
+            <Play className="w-4 h-4" />
+            Ejecución
+          </TabsTrigger>
+          <TabsTrigger value="resultados" className="flex items-center gap-2">
+            <BarChart3 className="w-4 h-4" />
+            Resultados
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="configuracion" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Target className="w-5 h-5" />
+                Parámetros del Algoritmo Genético
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <div>
+                    <Label>Número de Reactivos (K): {parametros.K}</Label>
+                    <Slider
+                      value={[parametros.K]}
+                      onValueChange={([value]) => setParametros({...parametros, K: value})}
+                      max={Math.min(10, reactivos.length)}
+                      min={1}
+                      step={1}
+                      className="mt-2"
+                    />
+                  </div>
+                  
+                  <div>
+                    <Label>Tamaño de Población: {parametros.tamañoPoblacion}</Label>
+                    <Slider
+                      value={[parametros.tamañoPoblacion]}
+                      onValueChange={([value]) => setParametros({...parametros, tamañoPoblacion: value})}
+                      max={50}
+                      min={10}
+                      step={5}
+                      className="mt-2"
+                    />
+                  </div>
+                  
+                  <div>
+                    <Label>Generaciones: {parametros.generaciones}</Label>
+                    <Slider
+                      value={[parametros.generaciones]}
+                      onValueChange={([value]) => setParametros({...parametros, generaciones: value})}
+                      max={100}
+                      min={10}
+                      step={10}
+                      className="mt-2"
+                    />
+                  </div>
+                </div>
+                
+                <div className="space-y-4">
+                  <div>
+                    <Label>Tasa de Mutación: {parametros.tasaMutacion.toFixed(2)}</Label>
+                    <Slider
+                      value={[parametros.tasaMutacion * 100]}
+                      onValueChange={([value]) => setParametros({...parametros, tasaMutacion: value / 100})}
+                      max={50}
+                      min={5}
+                      step={1}
+                      className="mt-2"
+                    />
+                  </div>
+                  
+                  <div>
+                    <Label>Presión de Selección: {parametros.presionSeleccion.toFixed(2)}</Label>
+                    <Slider
+                      value={[parametros.presionSeleccion * 100]}
+                      onValueChange={([value]) => setParametros({...parametros, presionSeleccion: value / 100})}
+                      max={90}
+                      min={30}
+                      step={5}
+                      className="mt-2"
+                    />
+                  </div>
+                </div>
+              </div>
+              
+              <div className="bg-blue-50 p-4 rounded-lg">
+                <h4 className="font-medium text-blue-900 mb-2">Recomendaciones:</h4>
+                <ul className="text-sm text-blue-800 space-y-1">
+                  <li>• K = 3-5 para la mayoría de casos</li>
+                  <li>• Población = 20-30 para problemas medianos</li>
+                  <li>• Mutación = 10-20% para exploración balanceada</li>
+                  <li>• Presión alta (70-80%) para convergencia rápida</li>
+                </ul>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="datos" className="space-y-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Habilidades */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Estado de Habilidades</CardTitle>
+                <Button onClick={agregarHabilidad} size="sm">Agregar Habilidad</Button>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {habilidades.map((habilidad) => (
+                    <div key={habilidad.id} className="flex items-center gap-3 p-3 border rounded">
+                      <span className="font-medium w-12">{habilidad.id}</span>
+                      <div className="flex-1">
+                        <Input
+                          type="number"
+                          min="0"
+                          max="1"
+                          step="0.1"
+                          value={habilidad.calificacion}
+                          onChange={(e) => actualizarHabilidad(habilidad.id, parseFloat(e.target.value) || 0)}
+                          className="w-20"
+                        />
+                      </div>
+                      <div className={`px-2 py-1 rounded text-xs font-medium ${
+                        habilidad.aprobada ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                      }`}>
+                        {habilidad.aprobada ? 'Aprobada' : 'Pendiente'}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                
+                {/* Gráfica de habilidades */}
+                <div className="mt-6">
+                  <h4 className="font-medium mb-3">Calificaciones por Habilidad</h4>
+                  <ResponsiveContainer width="100%" height={200}>
+                    <BarChart data={datosHabilidades}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="name" />
+                      <YAxis domain={[0, 1]} />
+                      <Tooltip formatter={(value) => [`${(value * 100).toFixed(1)}%`, 'Calificación']} />
+                      <Bar dataKey="calificacion" fill={(entry) => entry.aprobada ? '#22c55e' : '#ef4444'} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Reactivos */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Reactivos Disponibles</CardTitle>
+                <Button onClick={agregarReactivo} size="sm">Agregar Reactivo</Button>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {reactivos.map((reactivo, idx) => (
+                    <div key={reactivo.id} className="p-3 border rounded">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-medium">{reactivo.id}</span>
+                        <span className="text-sm text-gray-500">
+                          Usado {conteoReactivos[reactivo.id] || 0} veces
+                        </span>
+                      </div>
+                      <div className="text-sm text-gray-600">
+                        <strong>Habilidades:</strong> {reactivo.habilidades.join(', ')}
+                      </div>
+                      <div className="text-sm text-gray-600">
+                        <strong>Pesos:</strong> {reactivo.pesos.map(p => p.toFixed(2)).join(', ')}
+                      </div>
+                      <div className="text-xs text-green-600 mt-1">
+                        ✓ Suma de pesos: {reactivo.pesos.reduce((sum, p) => sum + p, 0).toFixed(3)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Distribución de habilidades */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Distribución de Habilidades</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex justify-center">
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                    <Pie
+                      data={datosDistribucion}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      label={({name, value, percent}) => `${name}: ${value} (${(percent * 100).toFixed(1)}%)`}
+                      outerRadius={80}
+                      fill="#8884d8"
+                      dataKey="value"
+                    >
+                      {datosDistribucion.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="ejecucion" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Zap className="w-5 h-5" />
+                Ejecutar Algoritmo Genético
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-gray-600">
+                    Configuración actual: {parametros.K} reactivos, {parametros.tamañoPoblacion} individuos, {parametros.generaciones} generaciones
+                  </p>
+                </div>
+                <Button 
+                  onClick={ejecutarAlgoritmo}
+                  disabled={ejecutando}
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  {ejecutando ? 'Ejecutando...' : 'Iniciar Evolución'}
+                </Button>
+              </div>
+              
+              {ejecutando && (
+                <div className="space-y-2">
+                  <div className="text-sm text-gray-600">Progreso de la evolución...</div>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div 
+                      className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                      style={{ 
+                        width: `${(historialFitness.length / parametros.generaciones) * 100}%` 
+                      }}
+                    ></div>
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    Generación {historialFitness.length} de {parametros.generaciones}
+                  </div>
+                </div>
+              )}
+
+              {historialFitness.length > 0 && (
+                <div className="mt-6">
+                  <h4 className="font-medium mb-3">Evolución del Fitness</h4>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <LineChart data={historialFitness}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="generacion" />
+                      <YAxis />
+                      <Tooltip formatter={(value) => [value.toFixed(4), 'Fitness']} />
+                      <Legend />
+                      <Line 
+                        type="monotone" 
+                        dataKey="fitness" 
+                        stroke="#2563eb" 
+                        strokeWidth={2}
+                        dot={{ r: 3 }}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+
+              {mejorSolucion && (
+                <div className="mt-6 p-4 bg-green-50 border border-green-200 rounded-lg">
+                  <h4 className="font-medium text-green-900 mb-2">Mejor Solución Encontrada</h4>
+                  <div className="space-y-2 text-sm">
+                    <div><strong>Reactivos seleccionados:</strong> {mejorSolucion.genes.join(', ')}</div>
+                    <div><strong>Fitness:</strong> {mejorSolucion.fitness.toFixed(4)}</div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-3">
+                      <div className="text-center p-2 bg-white rounded border">
+                        <div className="text-xs text-gray-600">OBJ1</div>
+                        <div className="font-medium">{mejorSolucion.obj1.toFixed(3)}</div>
+                      </div>
+                      <div className="text-center p-2 bg-white rounded border">
+                        <div className="text-xs text-gray-600">OBJ2</div>
+                        <div className="font-medium">{mejorSolucion.obj2.toFixed(0)}</div>
+                      </div>
+                      <div className="text-center p-2 bg-white rounded border">
+                        <div className="text-xs text-gray-600">OBJ3</div>
+                        <div className="font-medium">{mejorSolucion.obj3.toFixed(0)}</div>
+                      </div>
+                      <div className="text-center p-2 bg-white rounded border">
+                        <div className="text-xs text-gray-600">OBJ4</div>
+                        <div className="font-medium">{mejorSolucion.obj4.toFixed(0)}</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="resultados" className="space-y-4">
+          {resultados ? (
+            <div className="space-y-6">
+              {/* Métricas principales */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <Card>
+                  <CardContent className="p-4 text-center">
+                    <div className="text-2xl font-bold text-blue-600">
+                      {resultados.mejorFitness.toFixed(4)}
+                    </div>
+                    <div className="text-sm text-gray-600">Fitness Final</div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-4 text-center">
+                    <div className="text-2xl font-bold text-green-600">
+                      {resultados.metricas.obj1.toFixed(3)}
+                    </div>
+                    <div className="text-sm text-gray-600">Habilidades No Aprobadas</div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-4 text-center">
+                    <div className="text-2xl font-bold text-red-600">
+                      {resultados.metricas.obj2}
+                    </div>
+                    <div className="text-sm text-gray-600">Reactivos Repetidos</div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-4 text-center">
+                    <div className="text-2xl font-bold text-purple-600">
+                      {resultados.metricas.obj4}
+                    </div>
+                    <div className="text-sm text-gray-600">Habilidades Cubiertas</div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Gráfica de evolución de métricas */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Evolución de Métricas</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={400}>
+                    <LineChart data={historialFitness}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="generacion" />
+                      <YAxis />
+                      <Tooltip />
+                      <Legend />
+                      <Line type="monotone" dataKey="obj1" stroke="#22c55e" name="OBJ1 (Habilidades No Aprobadas)" />
+                      <Line type="monotone" dataKey="obj2" stroke="#ef4444" name="OBJ2 (Reactivos Repetidos)" />
+                      <Line type="monotone" dataKey="obj3" stroke="#f97316" name="OBJ3 (Reactivos con Hab. Aprobadas)" />
+                      <Line type="monotone" dataKey="obj4" stroke="#8b5cf6" name="OBJ4 (Habilidades Cubiertas)" />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+
+              {/* Análisis de reactivos seleccionados */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Análisis de Reactivos Seleccionados</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {resultados.reactivosSeleccionados.map((reactivoId) => {
+                      const reactivo = reactivos.find(r => r.id === reactivoId);
+                      const conteo = conteoReactivos[reactivoId] || 0;
+                      
+                      return (
+                        <div key={reactivoId} className="p-4 border rounded-lg">
+                          <div className="flex justify-between items-start mb-2">
+                            <h4 className="font-medium text-lg">{reactivoId}</h4>
+                            <div className="text-sm text-gray-500">
+                              Usado {conteo} veces anteriormente
+                            </div>
+                          </div>
+                          
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                              <h5 className="text-sm font-medium text-gray-700 mb-2">Habilidades Involucradas</h5>
+                              <div className="space-y-1">
+                                {reactivo?.habilidades.map((habilidadId, idx) => {
+                                  const habilidad = habilidades.find(h => h.id === habilidadId);
+                                  const peso = reactivo.pesos[idx];
+                                  
+                                  return (
+                                    <div key={habilidadId} className="flex justify-between items-center text-sm">
+                                      <span className={`px-2 py-1 rounded ${
+                                        habilidad?.aprobada ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                                      }`}>
+                                        {habilidadId}
+                                      </span>
+                                      <span className="text-gray-600">
+                                        Peso: {peso.toFixed(2)} | Cal: {(habilidad?.calificacion * 100).toFixed(0)}%
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                            
+                            <div>
+                              <h5 className="text-sm font-medium text-gray-700 mb-2">Distribución de Pesos</h5>
+                              <ResponsiveContainer width="100%" height={120}>
+                                <BarChart data={reactivo?.habilidades.map((h, idx) => ({
+                                  habilidad: h,
+                                  peso: reactivo.pesos[idx]
+                                }))}>
+                                  <XAxis dataKey="habilidad" />
+                                  <YAxis domain={[0, 1]} />
+                                  <Tooltip formatter={(value) => [value.toFixed(3), 'Peso']} />
+                                  <Bar dataKey="peso" fill="#3b82f6" />
+                                </BarChart>
+                              </ResponsiveContainer>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Simulación de mejora */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Simulación de Mejora Esperada</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="bg-blue-50 p-4 rounded-lg">
+                    <h4 className="font-medium text-blue-900 mb-3">
+                      Si el estudiante resuelve correctamente estos reactivos:
+                    </h4>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="text-center p-3 bg-white rounded border">
+                        <div className="text-sm text-gray-600">Habilidades Actuales Aprobadas</div>
+                        <div className="text-xl font-bold text-green-600">
+                          {habilidades.filter(h => h.aprobada).length}
+                        </div>
+                      </div>
+                      
+                      <div className="text-center p-3 bg-white rounded border">
+                        <div className="text-sm text-gray-600">Estimación Después</div>
+                        <div className="text-xl font-bold text-blue-600">
+                          {Math.min(habilidades.length, habilidades.filter(h => h.aprobada).length + 2)}
+                        </div>
+                      </div>
+                      
+                      <div className="text-center p-3 bg-white rounded border">
+                        <div className="text-sm text-gray-600">Mejora Esperada</div>
+                        <div className="text-xl font-bold text-purple-600">
+                          +{Math.min(2, habilidades.filter(h => !h.aprobada).length)} habilidades
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="mt-4 text-sm text-blue-800">
+                      <strong>Recomendación:</strong> Los reactivos seleccionados optimizan el balance entre 
+                      abordar habilidades deficientes, evitar repetición excesiva y maximizar la cobertura 
+                      de habilidades.
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          ) : (
+            <Card>
+              <CardContent className="text-center py-12">
+                <div className="text-gray-500 mb-4">
+                  <BarChart3 className="w-16 h-16 mx-auto mb-4 opacity-50" />
+                  <p>No hay resultados disponibles</p>
+                  <p className="text-sm">Ejecuta el algoritmo para ver los resultados</p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+      </Tabs>
+
+      {/* Información adicional */}
+      <Card className="mt-8">
+        <CardHeader>
+          <CardTitle>Información del Algoritmo</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <h4 className="font-medium mb-2">Objetivos del Algoritmo:</h4>
+              <ul className="text-sm space-y-1 text-gray-600">
+                <li><strong>OBJ1 (Maximizar):</strong> Priorizar habilidades no aprobadas, especialmente las más bajas</li>
+                <li><strong>OBJ2 (Minimizar):</strong> Evitar reactivos que ya se han realizado muchas veces</li>
+                <li><strong>OBJ3 (Minimizar):</strong> Reducir reactivos que solo involucran habilidades ya aprobadas</li>
+                <li><strong>OBJ4 (Maximizar):</strong> Maximizar la variedad de habilidades cubiertas</li>
+              </ul>
+            </div>
+            
+            <div>
+              <h4 className="font-medium mb-2">Características Implementadas:</h4>
+              <ul className="text-sm space-y-1 text-gray-600">
+                <li>✅ Pesos de habilidades normalizados (suman 1 por reactivo)</li>
+                <li>✅ Soporte para reactivos con 2 a n habilidades</li>
+                <li>✅ Visualización en tiempo real del progreso</li>
+                <li>✅ Simulación de mejora esperada</li>
+                <li>✅ Análisis detallado de resultados</li>
+                <li>✅ Interfaz interactiva para configuración</li>
+              </ul>
+            </div>
+          </div>
+          
+          <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <h4 className="font-medium text-yellow-900 mb-2">Notas Importantes:</h4>
+            <ul className="text-sm text-yellow-800 space-y-1">
+              <li>• Los pesos de las habilidades se normalizan automáticamente para sumar 1.0</li>
+              <li>• El algoritmo prioriza habilidades con calificaciones más bajas</li>
+              <li>• La función de fitness combina todos los objetivos en una métrica única</li>
+              <li>• Los resultados son determinísticos con la misma semilla aleatoria</li>
+            </ul>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+};
+
+export default AlgoritmoGeneticoInterface;
