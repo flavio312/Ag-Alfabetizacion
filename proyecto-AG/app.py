@@ -4,26 +4,6 @@ from visualizacion.graficos import VisualizadorResultados
 from utils.configurador import ConfiguradorParametros
 from utils.helpers import crear_datos_ejemplo
 
-def crear_datos_ejemplo():
-    """Crea datos de ejemplo para probar el algoritmo."""
-    reactivos_data = {
-        'R1': Reactivo('R1', ['H1', 'H3', 'H5'], {'H1': 0.4, 'H3': 0.3, 'H5': 0.3}),
-        'R2': Reactivo('R2', ['H3', 'H4'], {'H3': 0.6, 'H4': 0.4}),
-        # ... (resto de reactivos)
-    }
-    
-    habilidades_data = {
-        'H1': Habilidad('H1', 0.9),
-        'H2': Habilidad('H2', 1.0),
-    }
-    
-    conteo_reactivos = {
-        'R1': 2,
-        'R2': 3,
-    }
-    
-    return reactivos_data, habilidades_data, conteo_reactivos, list(reactivos_data.keys())
-
 def ejecutar_algoritmo():
     """Función principal para ejecutar el algoritmo genético."""
     print("Inicializando algoritmo genético...")
@@ -65,11 +45,3 @@ if __name__ == "__main__":
     print("\n" + "="*60)
     print("EJECUCIÓN COMPLETADA")
     print("="*60)
-
-# Ordenar los individuos por cantidad de genes del mayor al menor y seleccionar los individuos con genes de >1 
-# Si hay una habilidad que tenga un valor (1) se descarta
-# Los reactivos tienen que sumar 1
-# Pero las habilidades no tienen que sumar 1, pueden ser 0 
-# Los reactivos tienen que ser únicos, no puede haber duplicados
-
-# H1=1 H1

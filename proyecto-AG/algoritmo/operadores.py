@@ -30,6 +30,10 @@ class OperadoresGeneticos:
     
     def cruzar(self, padre1: Individuo, padre2: Individuo) -> Tuple[List[str], List[str]]:
         """Cruza con corrección de duplicados."""
+        if len(padre1.genes) < 2 or len(padre2.genes) < 2:
+        # No se puede cruzar, devolver copias directas
+            return padre1.genes[:], padre2.genes[:]
+        
         punto_cruza = random.randint(1, len(padre1.genes) - 1)
         
         # Crear hijos iniciales

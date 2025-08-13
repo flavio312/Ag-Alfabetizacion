@@ -6,6 +6,9 @@ from typing import List, Dict, Tuple, Optional
 from dataclasses import dataclass, field
 from copy import deepcopy
 import seaborn as sns
+import matplotlib.patches as mpatches
+from matplotlib.patches import Rectangle, FancyBboxPatch
+import networkx as nx
 
 @dataclass
 class Reactivo:
@@ -303,7 +306,7 @@ class AlgoritmoGenetico:
                 print(f"Generación {generacion}: Mejor fitness = {mejor_actual.fitness:.4f}")
     
     def simular_mejora(self, individuo: Individual) -> Dict:
-        """Simula la mejora esperada si se resuelven correctamente los reactivos."""
+        """Simula la mejora esperada si se resuelven correctamente los reactivos (método original)."""
         habilidades_temp = deepcopy(self.habilidades_data)
         
         # Simular que se resuelven correctamente los reactivos
@@ -339,6 +342,60 @@ class AlgoritmoGenetico:
             'habilidades_aprobadas_despues': habilidades_aprobadas_despues,
             'nuevas_habilidades_aprobadas': habilidades_aprobadas_despues - habilidades_aprobadas_antes
         }
+    
+    def simular_mejora_secuencial(self, individuo: Individual) -> List[Dict]:
+        """Simula la mejora secuencial aplicando cada reactivo paso a paso."""
+        resultados = []
+        habilidades_temp = deepcopy(self.habilidades_data)
+        
+        # Estado inicial
+        estado_inicial = {
+            'paso': 0,
+            'reactivo': 'Estado Inicial',
+            'habilidades': {h_id: h.calificacion for h_id, h in habilidades_temp.items()},
+            'habilidades_aprobadas': sum(1 for h in habilidades_temp.values() if h.aprobada),
+            'completitud': sum(1 for h in habilidades_temp.values() if h.aprobada) / len(habilidades_temp),
+            'mejora_promedio': 0.0
+        }
+        resultados.append(estado_inicial)
+        
+        # Aplicar cada reactivo secuencialmente
+        for i, reactivo_id in enumerate(individuo.genes):
+            reactivo = self.reactivos_data[reactivo_id]
+            mejoras_aplicadas = {}
+            
+            # Calcular mejoras para cada habilidad del reactivo
+            for habilidad_id, peso in reactivo.peso_habilidades.items():
+                habilidad = habilidades_temp[habilidad_id]
+                calificacion_anterior = habilidad.calificacion
+                
+                if habilidad.calificacion < 0.7:
+                    # Aplicar mejora basada en el peso del reactivo
+                    mejora_base = peso * 0.25  # Factor de mejora ajustable
+                    # Agregar algo de variabilidad realista
+                    variabilidad = random.uniform(-0.05, 0.1)
+                    mejora_total = mejora_base + variabilidad
+                    
+                    nueva_calificacion = min(1.0, habilidad.calificacion + mejora_total)
+                    habilidad.calificacion = nueva_calificacion
+                    habilidad.aprobada = nueva_calificacion >= habilidad.umbral_aprobacion
+                    
+                    mejoras_aplicadas[habilidad_id] = nueva_calificacion - calificacion_anterior
+            
+            # Registrar estado después de aplicar el reactivo
+            estado_paso = {
+                'paso': i + 1,
+                'reactivo': reactivo_id,
+                'habilidades': {h_id: h.calificacion for h_id, h in habilidades_temp.items()},
+                'habilidades_aprobadas': sum(1 for h in habilidades_temp.values() if h.aprobada),
+                'completitud': sum(1 for h in habilidades_temp.values() if h.aprobada) / len(habilidades_temp),
+                'mejoras_aplicadas': mejoras_aplicadas,
+                'mejora_promedio': np.mean(list(mejoras_aplicadas.values())) if mejoras_aplicadas else 0.0,
+                'habilidades_involucradas': list(reactivo.habilidades)
+            }
+            resultados.append(estado_paso)
+        
+        return resultados
 
 class VisualizadorResultados:
     """Clase para generar visualizaciones del algoritmo genético."""
@@ -536,7 +593,7 @@ class VisualizadorResultados:
         plt.show()
     
     def generar_reporte_completo(self):
-        """Genera un reporte completo con todas las visualizaciones."""
+        """Genera un reporte completo con todas las visualizaciones originales."""
         print("="*60)
         print("REPORTE COMPLETO DEL ALGORITMO GENÉTICO")
         print("="*60)
@@ -551,20 +608,338 @@ class VisualizadorResultados:
                 print(f"  {metrica}: {valor:.4f}")
             
             # Simulación de mejora
-            simulacion = self.algoritmo.simular_mejora(mejor)
-            print(f"\nSIMULACIÓN DE MEJORA:")
-            print(f"Fitness actual: {simulacion['fitness_antes']:.4f}")
-            print(f"Fitness esperado: {simulacion['fitness_despues']:.4f}")
-            print(f"Mejora esperada: {simulacion['mejora_fitness']:.4f}")
-            print(f"Habilidades aprobadas antes: {simulacion['habilidades_aprobadas_antes']}")
-            print(f"Habilidades aprobadas después: {simulacion['habilidades_aprobadas_despues']}")
-            print(f"Nuevas habilidades que se aprobarían: {simulacion['nuevas_habilidades_aprobadas']}")
+            simulacion = self.algoritmo.simular_mejora_secuencial(mejor)
+            if simulacion:
+                estado_final = simulacion[-1]
+                estado_inicial = simulacion[0]
+                print(f"\nSIMULACIÓN DE MEJORA:")
+                print(f"Completitud inicial: {estado_inicial['completitud']*100:.1f}%")
+                print(f"Completitud final esperada: {estado_final['completitud']*100:.1f}%")
+                print(f"Habilidades aprobadas inicial: {estado_inicial['habilidades_aprobadas']}")
+                print(f"Habilidades aprobadas final: {estado_final['habilidades_aprobadas']}")
+                print(f"Nuevas habilidades que se aprobarían: {estado_final['habilidades_aprobadas'] - estado_inicial['habilidades_aprobadas']}")
         
-        print("\nGenerando visualizaciones...")
+        print("\nGenerando visualizaciones originales...")
         self.graficar_evolucion_fitness()
         self.graficar_metricas_objetivos()
         self.graficar_estado_habilidades()
         self.graficar_analisis_reactivos_seleccionados()
+
+    # NUEVAS FUNCIONES DE PREDICCIÓN
+    def graficar_prediccion_secuencial(self):
+        """Genera las gráficas de predicción secuencial solicitadas."""
+        if not self.algoritmo.mejor_individuo:
+            print("No hay mejor individuo para analizar")
+            return
+        
+        # Obtener simulación secuencial
+        simulacion = self.algoritmo.simular_mejora_secuencial(self.algoritmo.mejor_individuo)
+        
+        # Crear figura con 3 subplots como solicitado
+        fig = plt.figure(figsize=(20, 15))
+        
+        # GRÁFICA 1: Evolución de completitud por paso (tipo árbol/flujo)
+        ax1 = plt.subplot(3, 1, 1)
+        self._graficar_arbol_completitud(simulacion, ax1)
+        
+        # GRÁFICA 2: Matriz de calor de evolución de habilidades
+        ax2 = plt.subplot(3, 1, 2)
+        self._graficar_matriz_evolucion_habilidades(simulacion, ax2)
+        
+        # GRÁFICA 3: Métricas de impacto por reactivo
+        ax3 = plt.subplot(3, 1, 3)
+        self._graficar_impacto_reactivos(simulacion, ax3)
+        
+        plt.tight_layout()
+        plt.show()
+    
+    def _graficar_arbol_completitud(self, simulacion: List[Dict], ax):
+        """Gráfica tipo árbol mostrando la evolución de completitud."""
+        ax.clear()
+        
+        # Extraer datos
+        pasos = [s['paso'] for s in simulacion]
+        completitudes = [s['completitud'] * 100 for s in simulacion]
+        reactivos = [s['reactivo'] for s in simulacion]
+        
+        # Crear gráfica de flujo tipo árbol
+        for i in range(len(pasos)):
+            # Nodo principal
+            color = 'lightgreen' if completitudes[i] >= 70 else 'lightcoral' if completitudes[i] >= 50 else 'lightblue'
+            
+            # Dibujar nodo
+            circle = plt.Circle((i, completitudes[i]), 15, color=color, alpha=0.7, zorder=3)
+            ax.add_patch(circle)
+            
+            # Añadir texto del reactivo
+            ax.text(i, completitudes[i], f'{reactivos[i]}\n{completitudes[i]:.1f}%', 
+                   ha='center', va='center', fontsize=10, fontweight='bold', zorder=4)
+            
+            # Conectar con línea al siguiente nodo
+            if i < len(pasos) - 1:
+                ax.arrow(i + 0.3, completitudes[i], 0.4, completitudes[i+1] - completitudes[i], 
+                        head_width=2, head_length=0.1, fc='darkgray', ec='darkgray', zorder=2)
+        
+        # Línea de objetivo (70% completitud)
+        ax.axhline(y=70, color='red', linestyle='--', alpha=0.8, linewidth=2, label='Objetivo 70%')
+        
+        ax.set_xlabel('Paso en la Secuencia', fontsize=12, fontweight='bold')
+        ax.set_ylabel('Completitud de Habilidades (%)', fontsize=12, fontweight='bold')
+        ax.set_title('Evolución de Completitud por Reactivo (Predicción Tipo Árbol)', 
+                    fontsize=14, fontweight='bold')
+        ax.grid(True, alpha=0.3)
+        ax.legend()
+        ax.set_ylim(0, 110)
+        ax.set_xlim(-0.5, len(pasos) - 0.5)
+    
+    def _graficar_matriz_evolucion_habilidades(self, simulacion: List[Dict], ax):
+        """Gráfica matriz de calor mostrando evolución de cada habilidad."""
+        ax.clear()
+        
+        # Preparar datos para matriz de calor
+        todas_habilidades = list(simulacion[0]['habilidades'].keys())
+        matriz_evolucion = []
+        etiquetas_pasos = []
+        
+        for paso in simulacion:
+            fila = [paso['habilidades'][h] for h in todas_habilidades]
+            matriz_evolucion.append(fila)
+            etiquetas_pasos.append(f"Paso {paso['paso']}: {paso['reactivo']}")
+        
+        matriz_evolucion = np.array(matriz_evolucion)
+        
+        # Crear mapa de calor
+        im = ax.imshow(matriz_evolucion, cmap='RdYlGn', aspect='auto', interpolation='nearest')
+        
+        # Configurar ejes
+        ax.set_xticks(range(len(todas_habilidades)))
+        ax.set_xticklabels(todas_habilidades, rotation=45)
+        ax.set_yticks(range(len(etiquetas_pasos)))
+        ax.set_yticklabels(etiquetas_pasos)
+        
+        # Añadir valores en las celdas
+        for i in range(len(etiquetas_pasos)):
+            for j in range(len(todas_habilidades)):
+                value = matriz_evolucion[i, j]
+                color = 'white' if value < 0.5 else 'black'
+                ax.text(j, i, f'{value:.2f}', ha='center', va='center', 
+                       color=color, fontsize=10, fontweight='bold')
+        
+        # Línea de separación en 0.7 (umbral de aprobación)
+        cbar = plt.colorbar(im, ax=ax)
+        cbar.set_label('Calificación de Habilidad', fontsize=12)
+        
+        ax.set_title('Evolución de Habilidades por Paso (Matriz de Predicción)', 
+                    fontsize=14, fontweight='bold')
+        ax.set_xlabel('Habilidades', fontsize=12, fontweight='bold')
+        ax.set_ylabel('Pasos de Aplicación', fontsize=12, fontweight='bold')
+    
+    def _graficar_impacto_reactivos(self, simulacion: List[Dict], ax):
+        """Gráfica el impacto de cada reactivo."""
+        ax.clear()
+        
+        # Filtrar solo los pasos con reactivos (excluir estado inicial)
+        pasos_reactivos = [s for s in simulacion if s['paso'] > 0]
+        
+        if not pasos_reactivos:
+            return
+        
+        reactivos = [s['reactivo'] for s in pasos_reactivos]
+        mejoras_promedio = [s['mejora_promedio'] for s in pasos_reactivos]
+        habilidades_nuevas_aprobadas = []
+        
+        # Calcular habilidades nuevas aprobadas en cada paso
+        aprobadas_anterior = simulacion[0]['habilidades_aprobadas']
+        for s in pasos_reactivos:
+            nuevas = s['habilidades_aprobadas'] - aprobadas_anterior
+            habilidades_nuevas_aprobadas.append(nuevas)
+            aprobadas_anterior = s['habilidades_aprobadas']
+        
+        # Crear gráfica de barras doble
+        x_pos = np.arange(len(reactivos))
+        
+        bars1 = ax.bar(x_pos - 0.2, mejoras_promedio, 0.4, label='Mejora Promedio', 
+                      color='skyblue', alpha=0.8)
+        bars2 = ax.bar(x_pos + 0.2, habilidades_nuevas_aprobadas, 0.4, 
+                      label='Nuevas Habilidades Aprobadas', color='lightgreen', alpha=0.8)
+        
+        # Añadir valores sobre las barras
+        for bar, valor in zip(bars1, mejoras_promedio):
+            if valor > 0:
+                ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.005, 
+                       f'{valor:.3f}', ha='center', va='bottom', fontsize=10, fontweight='bold')
+        
+        for bar, valor in zip(bars2, habilidades_nuevas_aprobadas):
+            if valor > 0:
+                ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.02, 
+                       f'{valor}', ha='center', va='bottom', fontsize=10, fontweight='bold')
+        
+        ax.set_xlabel('Reactivos Aplicados', fontsize=12, fontweight='bold')
+        ax.set_ylabel('Impacto', fontsize=12, fontweight='bold')
+        ax.set_title('Impacto Predictivo de Cada Reactivo', fontsize=14, fontweight='bold')
+        ax.set_xticks(x_pos)
+        ax.set_xticklabels(reactivos, rotation=45)
+        ax.legend()
+        ax.grid(True, alpha=0.3, axis='y')
+    
+    def graficar_arbol_decision_completo(self):
+        """Gráfica un árbol de decisión completo mostrando todas las posibles rutas."""
+        if not self.algoritmo.mejor_individuo:
+            print("No hay mejor individuo para analizar")
+            return
+        
+        fig, ax = plt.subplots(figsize=(16, 12))
+        
+        # Crear grafo dirigido
+        G = nx.DiGraph()
+        
+        # Simular múltiples secuencias para crear el árbol
+        simulacion_principal = self.algoritmo.simular_mejora_secuencial(self.algoritmo.mejor_individuo)
+        
+        # Nodo raíz
+        nodo_raiz = "Inicio"
+        G.add_node(nodo_raiz, level=0, completitud=simulacion_principal[0]['completitud'])
+        
+        # Agregar nodos y aristas para la secuencia principal
+        nodo_anterior = nodo_raiz
+        for i, paso in enumerate(simulacion_principal[1:], 1):
+            nodo_actual = f"{paso['reactivo']}_paso_{i}"
+            G.add_node(nodo_actual, level=i, completitud=paso['completitud'], 
+                      reactivo=paso['reactivo'])
+            G.add_edge(nodo_anterior, nodo_actual, mejora=paso['mejora_promedio'])
+            nodo_anterior = nodo_actual
+        
+        # Posicionar nodos usando layout jerárquico
+        pos = {}
+        levels = {}
+        
+        for node in G.nodes():
+            level = G.nodes[node]['level']
+            if level not in levels:
+                levels[level] = []
+            levels[level].append(node)
+        
+        for level, nodes in levels.items():
+            for i, node in enumerate(nodes):
+                pos[node] = (level * 2, len(nodes) - i - 1)
+        
+        # Dibujar el grafo
+        ax.clear()
+        
+        # Dibujar aristas
+        nx.draw_networkx_edges(G, pos, ax=ax, edge_color='gray', arrows=True, 
+                              arrowsize=20, alpha=0.6, width=2)
+        
+        # Dibujar nodos con colores según completitud
+        for node in G.nodes():
+            x, y = pos[node]
+            completitud = G.nodes[node]['completitud'] * 100
+            
+            if completitud >= 70:
+                color = 'lightgreen'
+            elif completitud >= 50:
+                color = 'yellow'
+            else:
+                color = 'lightcoral'
+            
+            # Dibujar nodo
+            circle = plt.Circle((x, y), 0.3, color=color, alpha=0.8, zorder=3)
+            ax.add_patch(circle)
+            
+            # Añadir etiqueta
+            if node == "Inicio":
+                label = f"Inicio\n{completitud:.1f}%"
+            else:
+                reactivo = G.nodes[node]['reactivo']
+                label = f"{reactivo}\n{completitud:.1f}%"
+            
+            ax.text(x, y, label, ha='center', va='center', fontsize=9, 
+                   fontweight='bold', zorder=4)
+        
+        # Configurar axes
+        ax.set_xlim(-0.5, max(level * 2 for level in levels.keys()) + 0.5)
+        ax.set_ylim(-0.5, max(len(nodes) for nodes in levels.values()) + 0.5)
+        ax.set_aspect('equal')
+        ax.set_title('Árbol de Decisión: Secuencia Óptima de Reactivos', 
+                    fontsize=16, fontweight='bold')
+        ax.axis('off')
+        
+        # Leyenda
+        legend_elements = [
+            mpatches.Patch(color='lightgreen', label='Completitud ≥ 70%'),
+            mpatches.Patch(color='yellow', label='Completitud 50-69%'),
+            mpatches.Patch(color='lightcoral', label='Completitud < 50%')
+        ]
+        ax.legend(handles=legend_elements, loc='upper right')
+        
+        plt.tight_layout()
+        plt.show()
+    
+    def generar_reporte_prediccion_completo(self):
+        """Genera el reporte completo con las 3 gráficas de predicción solicitadas."""
+        print("="*80)
+        print("REPORTE DE PREDICCIÓN SECUENCIAL - EVOLUCIÓN DE HABILIDADES")
+        print("="*80)
+        
+        if not self.algoritmo.mejor_individuo:
+            print("No hay mejor individuo para analizar")
+            return
+        
+        # Obtener simulación
+        simulacion = self.algoritmo.simular_mejora_secuencial(self.algoritmo.mejor_individuo)
+        
+        # Mostrar resumen numérico
+        print(f"\nSECUENCIA ÓPTIMA DE REACTIVOS:")
+        print(f"Reactivos seleccionados: {self.algoritmo.mejor_individuo.genes}")
+        
+        print(f"\nEVOLUCIÓN PREDICHA:")
+        for paso in simulacion:
+            if paso['paso'] == 0:
+                print(f"Estado inicial: {paso['completitud']*100:.1f}% completitud, "
+                      f"{paso['habilidades_aprobadas']} habilidades aprobadas")
+            else:
+                print(f"Después de {paso['reactivo']}: {paso['completitud']*100:.1f}% completitud, "
+                      f"{paso['habilidades_aprobadas']} habilidades aprobadas "
+                      f"(+{paso['mejora_promedio']:.3f} mejora promedio)")
+        
+        print(f"\nGENERANDO GRÁFICAS DE PREDICCIÓN...")
+        
+        # Generar las 3 gráficas principales
+        self.graficar_prediccion_secuencial()
+        
+        # Generar gráfica adicional de árbol de decisión
+        print("Generando árbol de decisión completo...")
+        self.graficar_arbol_decision_completo()
+        
+        print("\n" + "="*80)
+        print("REPORTE DE PREDICCIÓN COMPLETADO")
+        print("="*80)
+
+    # Métodos originales mantenidos
+    def graficar_evolucion_fitness(self):
+        """Gráfica la evolución del fitness a lo largo de las generaciones."""
+        plt.figure(figsize=(12, 6))
+        
+        plt.subplot(1, 2, 1)
+        plt.plot(self.algoritmo.historial_fitness, 'b-', linewidth=2, marker='o', markersize=4)
+        plt.title('Evolución del Fitness', fontsize=14, fontweight='bold')
+        plt.xlabel('Generación')
+        plt.ylabel('Fitness')
+        plt.grid(True, alpha=0.3)
+        
+        plt.subplot(1, 2, 2)
+        # Gráfica de las últimas 10 generaciones con más detalle
+        if len(self.algoritmo.historial_fitness) > 10:
+            ultimas_fitness = self.algoritmo.historial_fitness[-10:]
+            plt.plot(range(len(self.algoritmo.historial_fitness)-10, len(self.algoritmo.historial_fitness)), 
+                    ultimas_fitness, 'r-', linewidth=2, marker='s', markersize=5)
+            plt.title('Últimas 10 Generaciones', fontsize=14, fontweight='bold')
+            plt.xlabel('Generación')
+            plt.ylabel('Fitness')
+            plt.grid(True, alpha=0.3)
+        
+        plt.tight_layout()
+        plt.show()
 
 def crear_datos_ejemplo():
     """Crea datos de ejemplo para probar el algoritmo."""
@@ -609,33 +984,6 @@ def crear_datos_ejemplo():
     reactivos_alcanzables = list(reactivos_data.keys())
     
     return reactivos_data, habilidades_data, conteo_reactivos, reactivos_alcanzables
-
-def ejecutar_ejemplo_completo():
-    """Ejecuta un ejemplo completo del algoritmo genético."""
-    print("Creando datos de ejemplo...")
-    reactivos_data, habilidades_data, conteo_reactivos, reactivos_alcanzables = crear_datos_ejemplo()
-    
-    print("Inicializando algoritmo genético...")
-    ag = AlgoritmoGenetico(
-        reactivos_alcanzables=reactivos_alcanzables,
-        reactivos_data=reactivos_data,
-        habilidades_data=habilidades_data,
-        conteo_reactivos=conteo_reactivos,
-        K=3,
-        tamaño_poblacion=20,
-        generaciones=50,
-        tasa_mutacion=0.15,
-        presion_seleccion=0.7
-    )
-    
-    print("Ejecutando evolución...")
-    ag.evolucionar()
-    
-    print("Generando visualizaciones y reporte...")
-    visualizador = VisualizadorResultados(ag)
-    visualizador.generar_reporte_completo()
-    
-    return ag, visualizador
 
 def validar_restricciones():
     """Valida que las restricciones del algoritmo se cumplan."""
@@ -693,19 +1041,70 @@ class ConfiguradorParametros:
         
         return config
 
+def ejecutar_ejemplo_completo():
+    """Ejecuta un ejemplo completo del algoritmo genético con todas las visualizaciones."""
+    print("Creando datos de ejemplo...")
+    reactivos_data, habilidades_data, conteo_reactivos, reactivos_alcanzables = crear_datos_ejemplo()
+    
+    print("Inicializando algoritmo genético...")
+    ag = AlgoritmoGenetico(
+        reactivos_alcanzables=reactivos_alcanzables,
+        reactivos_data=reactivos_data,
+        habilidades_data=habilidades_data,
+        conteo_reactivos=conteo_reactivos,
+        K=3,
+        tamaño_poblacion=20,
+        generaciones=50,
+        tasa_mutacion=0.15,
+        presion_seleccion=0.7
+    )
+    
+    print("Ejecutando evolución...")
+    ag.evolucionar()
+    
+    print("Generando visualizaciones y reportes...")
+    visualizador = VisualizadorResultados(ag)
+    
+    # Generar TODAS las visualizaciones (originales + nuevas)
+    print("\n--- REPORTE ORIGINAL ---")
+    visualizador.generar_reporte_completo()
+    
+    print("\n--- REPORTE DE PREDICCIÓN ---")
+    visualizador.generar_reporte_prediccion_completo()
+    
+    return ag, visualizador
+
+def ejecutar_ejemplo_con_prediccion():
+    """Ejecuta un ejemplo completo del algoritmo genético con predicciones."""
+    return ejecutar_ejemplo_completo()
+
 # Función principal para ejecutar el algoritmo
 if __name__ == "__main__":
-    print("="*60)
+    print("="*80)
     print("ALGORITMO GENÉTICO PARA SELECCIÓN DE REACTIVOS EDUCATIVOS")
-    print("="*60)
+    print("CON GRÁFICAS DE PREDICCIÓN SECUENCIAL")
+    print("="*80)
     
     validar_restricciones()
     
+    # Ejecutar ejemplo completo con TODAS las visualizaciones
     algoritmo, visualizador = ejecutar_ejemplo_completo()
     
-    print("\n" + "="*60)
-    print("EJECUCIÓN COMPLETADA")
-    print("="*60)
+    print("\n" + "="*80)
+    print("EJECUCIÓN COMPLETADA - TODAS LAS GRÁFICAS GENERADAS")
+    print("="*80)
+    
+    print("\nGRÁFICAS GENERADAS:")
+    print("✓ Gráficas Originales:")
+    print("  - Evolución del Fitness")
+    print("  - Métricas de Objetivos")
+    print("  - Estado de Habilidades")
+    print("  - Análisis de Reactivos Seleccionados")
+    print("✓ Nuevas Gráficas de Predicción:")
+    print("  - Evolución de Completitud (Tipo Árbol)")
+    print("  - Matriz de Evolución de Habilidades")
+    print("  - Impacto de Reactivos")
+    print("  - Árbol de Decisión Completo")
     
     print("\nRECOMENDACIONES DE PARÁMETROS:")
     config_simple = ConfiguradorParametros.recomendar_parametros(10, 8, "simple")
@@ -715,3 +1114,9 @@ if __name__ == "__main__":
     print("Problema simple:", config_simple)
     print("Problema medio:", config_medio)
     print("Problema complejo:", config_complejo)
+    
+    print("\nUSO ADICIONAL:")
+    print("# Para generar solo gráficas originales:")
+    print("visualizador.generar_reporte_completo()")
+    print("\n# Para generar solo gráficas de predicción:")
+    print("visualizador.generar_reporte_prediccion_completo()")
