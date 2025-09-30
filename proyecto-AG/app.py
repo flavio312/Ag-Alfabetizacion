@@ -5,7 +5,6 @@ from utils.configurador import ConfiguradorParametros
 from utils.helpers import crear_datos_ejemplo
 
 def ejecutar_algoritmo():
-    """Función principal para ejecutar el algoritmo genético."""
     print("Inicializando algoritmo genético...")
     
     # Crear datos de ejemplo
@@ -33,6 +32,7 @@ def ejecutar_algoritmo():
     visualizador = VisualizadorResultados(ag)
     visualizador.generar_reporte_completo()
     
+
     return ag, visualizador
 
 if __name__ == "__main__":
@@ -45,3 +45,6 @@ if __name__ == "__main__":
     print("\n" + "="*60)
     print("EJECUCIÓN COMPLETADA")
     print("="*60)
+
+
+# 

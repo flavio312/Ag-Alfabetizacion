@@ -4,6 +4,8 @@ __pycache__/
 *.pyd
 test.py
 
+*.docx
+
 *.zip
 *.tar.gz
 *.docx
